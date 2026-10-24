@@ -31,7 +31,7 @@ export const LoginPage: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
@@ -42,12 +42,17 @@ export const LoginPage: React.FC = () => {
 
     setIsLoading(true);
 
-    // Call unified login: redirects to AdminDashboard if Admin, or SchoolView if School
-    const success = login(username.trim(), password);
+    try {
+      // Call unified login: redirects to AdminDashboard if Admin, or SchoolView if School
+      const success = await login(username.trim(), password);
 
-    if (!success) {
+      if (!success) {
+        setIsLoading(false);
+        setErrorMsg('اسم المستخدم أو كلمة المرور غير صحيحة. يرجى التحقق من صحة البيانات.');
+      }
+    } catch {
       setIsLoading(false);
-      setErrorMsg('اسم المستخدم أو كلمة المرور غير صحيحة. يرجى التحقق من صحة البيانات.');
+      setErrorMsg('حدث خطأ أثناء محاولة تسجيل الدخول. يرجى المحاولة مجدداً.');
     }
   };
 
