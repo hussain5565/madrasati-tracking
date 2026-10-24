@@ -1,0 +1,8 @@
+{
+  "name": "سجل متابعة منصة مدرستي",
+  "description": "منظومة سجل متابعة منصة مدرستي للمدير العام والمدارس لمتابعة التحضير والخطط والواجبات والاختبارات لجميع المعلمين.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
