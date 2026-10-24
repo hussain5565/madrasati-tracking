@@ -121,7 +121,7 @@ export const Header: React.FC = () => {
             </span>
           )}
 
-          {currentUser?.role === 'admin' && isSchoolView && (
+          {(currentUser?.role === 'admin' || currentUser?.isAdminImpersonating) && isSchoolView && (
             <button
               onClick={() => loginAsAdmin('admin100', '123456@')}
               className="text-[11px] text-amber-300 hover:text-white flex items-center gap-1 bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-500/30 font-bold transition cursor-pointer"
