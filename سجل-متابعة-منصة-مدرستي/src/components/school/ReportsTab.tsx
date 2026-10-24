@@ -21,10 +21,7 @@ import {
   PieChart,
   FileCheck,
   CalendarRange,
-  BookOpen,
-  Sparkles,
-  ShieldCheck,
-  CheckCheck
+  BookOpen
 } from 'lucide-react';
 import { getSchoolGenderLabels } from '../../utils/genderLabels';
 import { MinistryLogo } from '../MinistryLogo';
@@ -164,9 +161,38 @@ export const ReportsTab: React.FC = () => {
       ? targetWeekObj.title
       : MONTHS_LIST.find((m) => m.id === targetMonth)?.name || `الشهر ${targetMonth}`;
 
-  // Date and day of the report
-  const reportDateHijri = targetWeekObj.days[4].hijriDate + 'هـ';
-  const reportDayName = 'الخميس'; // End of academic week reporting day in Saudi Arabia
+  // Dynamic Day Name and Hijri/Gregorian Date (updates automatically each day)
+  const { reportDayName, reportDateHijri, reportDateGregorian } = useMemo(() => {
+    const today = new Date();
+
+    // Actual Day Name in Arabic (السبت, الأحد, الإثنين, الثلاثاء, الأربعاء, الخميس, الجمعة)
+    const day = new Intl.DateTimeFormat('ar-SA', { weekday: 'long' }).format(today);
+
+    // Dynamic Hijri Date
+    let hijri = '';
+    try {
+      hijri = new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', {
+        day: 'numeric',
+        month: 'numeric',
+        year: 'numeric',
+      }).format(today) + 'هـ';
+    } catch {
+      hijri = (targetWeekObj?.days[0]?.hijriDate || '1448/1/1') + 'هـ';
+    }
+
+    // Gregorian Date in Arabic
+    const greg = new Intl.DateTimeFormat('ar-EG', {
+      day: 'numeric',
+      month: 'numeric',
+      year: 'numeric',
+    }).format(today) + 'م';
+
+    return {
+      reportDayName: day,
+      reportDateHijri: hijri,
+      reportDateGregorian: greg,
+    };
+  }, [targetWeekObj]);
 
   const reportFileName = labels.isGirls
     ? `تقرير_متابعة_معلمات_${currentSchool.name}_${reportPeriod === 'weekly' ? `أسبوع_${targetWeek}` : `شهر_${targetMonth}`}`
@@ -209,7 +235,7 @@ export const ReportsTab: React.FC = () => {
     window.print();
   };
 
-  // Direct PDF Download with html2pdf
+  // Direct PDF Download with html2pdf (compact 1-page fit)
   const handleDownloadPDF = async () => {
     if (!reportPrintRef.current || isGeneratingPDF) return;
 
@@ -218,7 +244,7 @@ export const ReportsTab: React.FC = () => {
 
       const element = reportPrintRef.current;
       const opt = {
-        margin: [6, 6, 8, 6] as [number, number, number, number],
+        margin: [4, 4, 4, 4] as [number, number, number, number],
         filename: `${reportFileName}.pdf`,
         image: { type: 'jpeg' as const, quality: 0.98 },
         html2canvas: {
@@ -226,6 +252,7 @@ export const ReportsTab: React.FC = () => {
           useCORS: true,
           logging: false,
           letterRendering: true,
+          windowWidth: 1024,
         },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
         pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
@@ -249,7 +276,7 @@ export const ReportsTab: React.FC = () => {
   const pctNotDone = stats.totalItems > 0 ? Math.round((stats.notDoneCount / total) * 100) : 0;
   const pctIncomplete = stats.totalItems > 0 ? Math.max(0, 100 - pctDone - pctNotDone) : 0;
 
-  const circumference = 2 * Math.PI * 40;
+  const circumference = 2 * Math.PI * 34;
   const strokeDone = (pctDone / 100) * circumference;
   const strokeIncomplete = (pctIncomplete / 100) * circumference;
   const strokeNotDone = (pctNotDone / 100) * circumference;
@@ -266,20 +293,20 @@ export const ReportsTab: React.FC = () => {
   const getItemIcon = (key: string) => {
     switch (key) {
       case 'prep':
-        return <FileCheck className="w-4 h-4 text-emerald-700" />;
+        return <FileCheck className="w-3.5 h-3.5 text-emerald-700" />;
       case 'plan':
-        return <CalendarRange className="w-4 h-4 text-teal-700" />;
+        return <CalendarRange className="w-3.5 h-3.5 text-teal-700" />;
       case 'homework':
-        return <BookOpen className="w-4 h-4 text-sky-700" />;
+        return <BookOpen className="w-3.5 h-3.5 text-sky-700" />;
       case 'exam':
-        return <Award className="w-4 h-4 text-amber-700" />;
+        return <Award className="w-3.5 h-3.5 text-amber-700" />;
       default:
-        return <FileCheck className="w-4 h-4 text-emerald-700" />;
+        return <FileCheck className="w-3.5 h-3.5 text-emerald-700" />;
     }
   };
 
   return (
-    <div className="space-y-6 w-full max-w-7xl mx-auto pb-14 font-['Cairo']">
+    <div className="space-y-4 w-full max-w-7xl mx-auto pb-10 font-['Cairo']">
       {/* Toast Notification on PDF Success */}
       {pdfSuccess && (
         <div className="fixed bottom-5 left-5 right-5 sm:left-auto sm:right-5 sm:w-96 z-50 bg-[#165a49] text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2 border border-emerald-500 animate-in fade-in slide-in-from-bottom duration-200">
@@ -289,7 +316,7 @@ export const ReportsTab: React.FC = () => {
       )}
 
       {/* 1. Interactive Filter Controls (Hidden on print) */}
-      <div className="no-print bg-white rounded-3xl p-4 sm:p-6 border border-slate-200 shadow-2xs hover-card-motion space-y-4">
+      <div className="no-print bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-2xs hover-card-motion space-y-3.5">
         {/* Scope and Period Toggles */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {/* Scope: All vs Single Teacher */}
@@ -301,7 +328,7 @@ export const ReportsTab: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setReportScope('single')}
-                className={`flex-1 py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 transition ${
+                className={`flex-1 py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer ${
                   reportScope === 'single'
                     ? 'bg-white text-[#165a49] shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -315,7 +342,7 @@ export const ReportsTab: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setReportScope('all')}
-                className={`flex-1 py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 transition ${
+                className={`flex-1 py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer ${
                   reportScope === 'all'
                     ? 'bg-white text-[#165a49] shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -338,7 +365,7 @@ export const ReportsTab: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setReportPeriod('weekly')}
-                className={`flex-1 py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 transition ${
+                className={`flex-1 py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer ${
                   reportPeriod === 'weekly'
                     ? 'bg-white text-[#165a49] shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -352,7 +379,7 @@ export const ReportsTab: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setReportPeriod('monthly')}
-                className={`flex-1 py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 transition ${
+                className={`flex-1 py-2 px-2 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer ${
                   reportPeriod === 'monthly'
                     ? 'bg-white text-[#165a49] shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -449,14 +476,14 @@ export const ReportsTab: React.FC = () => {
               title="طباعة التقرير مباشرة"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>طباعة التقرير</span>
+              <span>طباعة</span>
             </button>
 
             <button
               onClick={handleDownloadPDF}
               disabled={isGeneratingPDF}
               className="py-1.5 px-4 rounded-xl bg-gradient-to-r from-[#165a49] to-[#1f7862] hover:from-[#124d3e] hover:to-[#165a49] disabled:bg-slate-400 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-md shadow-emerald-800/20 active:scale-95 transition cursor-pointer border-b-2 border-emerald-900"
-              title="تحميل ملف التقرير بصيغة PDF مع الترويسة والشعار"
+              title="تحميل ملف التقرير بصيغة PDF صفحة واحدة مواءمة"
             >
               {isGeneratingPDF ? (
                 <>
@@ -476,35 +503,32 @@ export const ReportsTab: React.FC = () => {
 
       {/* ======================================================== */}
       {/* Printable / PDF Exportable Container                     */}
-      {/* Complete with Official 3-Part Header, Logo, All Cards    */}
+      {/* Compact single-page A4 optimized styling                 */}
       {/* ======================================================== */}
       <div 
         ref={reportPrintRef} 
         id="report-printable-area"
-        className="space-y-6 bg-white p-3 sm:p-5 rounded-3xl print:p-0 print:border-none shadow-sm"
+        className="space-y-3.5 bg-white p-3.5 sm:p-5 rounded-3xl print:p-0 print:border-none shadow-xs text-slate-800"
       >
         {/* ====================================================================== */}
         {/* Official Saudi Ministry of Education Header (ترويسة التقرير الرسمية)   */}
-        {/* Right: Kingdom & School | Center: Ministry Logo | Left: Date & Day     */}
+        {/* Right: Kingdom & School | Center: Logo | Left: Dynamic Day & Date      */}
         {/* ====================================================================== */}
-        <div className="bg-gradient-to-b from-slate-50 to-white rounded-3xl p-5 border border-slate-200/90 shadow-2xs relative overflow-hidden">
-          {/* Top Decorative National Ribbon */}
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#165a49] via-emerald-600 to-[#165a49]" />
+        <div className="bg-gradient-to-b from-slate-50 to-white rounded-2xl p-3 sm:p-3.5 border border-slate-200/90 shadow-2xs relative overflow-hidden">
+          {/* Top Decorative Ribbon */}
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#165a49] via-emerald-600 to-[#165a49]" />
 
-          <div className="grid grid-cols-3 items-center gap-2 pt-2 pb-3 border-b-2 border-emerald-800/40">
+          <div className="grid grid-cols-3 items-center gap-2 pt-1 pb-2 border-b border-emerald-800/30">
             {/* 1. Right Side: Kingdom, Ministry, School, Category */}
-            <div className="text-right text-xs space-y-0.5">
-              <p className="font-extrabold text-slate-800 text-[11px] sm:text-xs">
+            <div className="text-right text-[11px] leading-tight space-y-0.5">
+              <p className="font-extrabold text-slate-800 text-[11px]">
                 المملكة العربية السعودية
               </p>
-              <p className="font-bold text-[#165a49] text-[11px]">
+              <p className="font-bold text-[#165a49] text-[10px]">
                 وزارة التعليم
               </p>
-              <p className="text-[10px] text-slate-500 font-medium">
-                {currentSchool.educationOffice || 'الإدارة العامة للتعليم'}
-              </p>
-              <div className="pt-1 flex items-center gap-1.5">
-                <span className="font-bold text-slate-900 text-xs sm:text-sm">
+              <div className="pt-0.5 flex items-center gap-1.5">
+                <span className="font-bold text-slate-900 text-xs">
                   {currentSchool.name}
                 </span>
                 <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-md border ${
@@ -517,28 +541,28 @@ export const ReportsTab: React.FC = () => {
 
             {/* 2. Center: Official Ministry Vector Logo & Title */}
             <div className="text-center flex flex-col items-center justify-center">
-              <MinistryLogo size={70} />
-              <h2 className="text-xs sm:text-sm font-black text-[#165a49] tracking-tight mt-1">
+              <MinistryLogo size={52} />
+              <h2 className="text-xs font-black text-[#165a49] tracking-tight mt-0.5">
                 سجل متابعة منصة مدرستي
               </h2>
-              <span className="text-[10px] text-slate-500 font-semibold">
+              <span className="text-[9px] text-slate-500 font-bold">
                 {reportPeriod === 'weekly' ? 'التقرير الأسبوعي' : 'التقرير الشهري'}
               </span>
             </div>
 
-            {/* 3. Left Side: Date, Day, Week, Official Status */}
-            <div className="text-left text-xs space-y-1 font-mono text-[11px]">
-              <div className="inline-block bg-slate-50 border border-slate-200/90 rounded-xl p-2 text-right">
+            {/* 3. Left Side: Dynamic Date & Day (changes every day) */}
+            <div className="text-left text-[10px] space-y-0.5 font-mono">
+              <div className="inline-block bg-slate-50 border border-slate-200/90 rounded-xl p-1.5 text-right">
                 <p className="text-slate-700">
-                  <span className="font-sans text-slate-400 text-[10px]">اليوم: </span>
-                  <strong className="text-slate-800 font-sans">{reportDayName}</strong>
+                  <span className="font-sans text-slate-400 text-[9px]">اليوم: </span>
+                  <strong className="text-slate-900 font-sans font-bold">{reportDayName}</strong>
                 </p>
                 <p className="text-slate-700">
-                  <span className="font-sans text-slate-400 text-[10px]">التاريخ: </span>
+                  <span className="font-sans text-slate-400 text-[9px]">التاريخ: </span>
                   <strong className="text-[#165a49]">{reportDateHijri}</strong>
                 </p>
                 <p className="text-slate-700">
-                  <span className="font-sans text-slate-400 text-[10px]">الفترة: </span>
+                  <span className="font-sans text-slate-400 text-[9px]">الفترة: </span>
                   <strong className="text-slate-800 font-sans">{periodTitle}</strong>
                 </p>
               </div>
@@ -546,491 +570,325 @@ export const ReportsTab: React.FC = () => {
           </div>
 
           {/* Subtitle / Scope Banner */}
-          <div className="mt-3 flex flex-wrap items-center justify-between text-xs pt-1">
-            <div className="flex items-center gap-2">
+          <div className="mt-2 flex flex-wrap items-center justify-between text-[11px] pt-0.5">
+            <div className="flex items-center gap-1.5">
               <span className="text-slate-500 font-medium">موضوع التقرير:</span>
-              <strong className="text-slate-900 font-bold bg-slate-100 px-2.5 py-0.5 rounded-lg border border-slate-200">
+              <strong className="text-slate-900 font-bold bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">
                 {labels.reportSubTitle(reportScope === 'single', currentTeacher?.name, currentSchool.name)}
               </strong>
             </div>
-            <div className="flex items-center gap-2 text-[11px] text-slate-500">
-              <span>{labels.principalLabel}: <strong>{currentSchool.principalName}</strong></span>
+            <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+              <span>{labels.principalLabel}: <strong className="text-slate-800">{currentSchool.principalName}</strong></span>
             </div>
           </div>
         </div>
 
         {/* ====================================================================== */}
-        {/* 2. Redesigned 4 KPI Cards (بطاقات الإحصائيات الأربعة بتصميم بارز وجميل) */}
+        {/* 2. Compact 4 KPI Cards (نسبة الإنجاز • تم • لم يتم • غير مكتمل)          */}
         {/* ====================================================================== */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-4 gap-2.5">
           {/* Card 1: نسبة الإنجاز */}
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-2xs hover-card-motion relative overflow-hidden flex flex-col justify-between">
+          <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/90 shadow-2xs relative overflow-hidden flex flex-col justify-between">
             <div className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-teal-500 to-emerald-600" />
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-slate-500">نسبة الإنجاز</span>
-              {/* Prominent Embossed Icon Badge */}
-              <div className="w-9 h-9 rounded-2xl bg-gradient-to-b from-teal-500 to-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-700/20 border-b-2 border-emerald-800">
-                <TrendingUp className="w-4 h-4" />
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-bold text-slate-500">نسبة الإنجاز</span>
+              <div className="w-6 h-6 rounded-xl bg-gradient-to-b from-teal-500 to-emerald-600 text-white flex items-center justify-center shadow-xs">
+                <TrendingUp className="w-3 h-3" />
               </div>
             </div>
             <div>
-              <div className="text-2xl sm:text-3xl font-black text-slate-900 mb-1">
+              <div className="text-lg sm:text-xl font-black text-slate-900 mb-0.5">
                 {stats.completionRate}%
               </div>
-              <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-md border ${rating.color}`}>
+              <span className={`inline-block text-[9px] font-bold px-1.5 py-0.2 rounded border ${rating.color}`}>
                 {rating.label}
               </span>
             </div>
           </div>
 
           {/* Card 2: تم */}
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-2xs hover-card-motion relative overflow-hidden flex flex-col justify-between">
+          <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/90 shadow-2xs relative overflow-hidden flex flex-col justify-between">
             <div className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-[#22b573] to-[#1ca164]" />
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-slate-700">عناصر مكتملة (تم)</span>
-              {/* Prominent Embossed Icon Badge */}
-              <div className="w-9 h-9 rounded-2xl bg-gradient-to-b from-[#22b573] to-[#1ca164] text-white flex items-center justify-center shadow-xs shadow-[#1ca164]/20 border-b-2 border-[#167d4e]">
-                <CheckCircle2 className="w-4 h-4" />
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-bold text-slate-700">مكتمل (تم)</span>
+              <div className="w-6 h-6 rounded-xl bg-gradient-to-b from-[#22b573] to-[#1ca164] text-white flex items-center justify-center shadow-xs">
+                <CheckCircle2 className="w-3 h-3" />
               </div>
             </div>
             <div>
-              <div className="text-2xl sm:text-3xl font-black text-[#1ca164] mb-1">
+              <div className="text-lg sm:text-xl font-black text-[#1ca164] mb-0.5">
                 {stats.doneCount}
               </div>
-              <span className="text-[10px] font-bold text-[#167d4e] bg-[#22b573]/10 px-2 py-0.5 rounded-md border border-[#22b573]/30">
-                منجز بنجاح
+              <span className="text-[9px] font-bold text-[#167d4e] bg-[#22b573]/10 px-1.5 py-0.2 rounded border border-[#22b573]/30">
+                منجز
               </span>
             </div>
           </div>
 
           {/* Card 3: لم يتم */}
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-2xs hover-card-motion relative overflow-hidden flex flex-col justify-between">
+          <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/90 shadow-2xs relative overflow-hidden flex flex-col justify-between">
             <div className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-[#f26374] to-[#df4b5e]" />
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-slate-700">لم يتم</span>
-              {/* Prominent Embossed Icon Badge */}
-              <div className="w-9 h-9 rounded-2xl bg-gradient-to-b from-[#f26374] to-[#df4b5e] text-white flex items-center justify-center shadow-xs shadow-[#df4b5e]/20 border-b-2 border-[#c03445]">
-                <XCircle className="w-4 h-4" />
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-bold text-slate-700">لم يتم</span>
+              <div className="w-6 h-6 rounded-xl bg-gradient-to-b from-[#f26374] to-[#df4b5e] text-white flex items-center justify-center shadow-xs">
+                <XCircle className="w-3 h-3" />
               </div>
             </div>
             <div>
-              <div className="text-2xl sm:text-3xl font-black text-[#df4b5e] mb-1">
+              <div className="text-lg sm:text-xl font-black text-[#df4b5e] mb-0.5">
                 {stats.notDoneCount}
               </div>
-              <span className="text-[10px] font-bold text-[#c03445] bg-[#f26374]/10 px-2 py-0.5 rounded-md border border-[#f26374]/30">
+              <span className="text-[9px] font-bold text-[#c03445] bg-[#f26374]/10 px-1.5 py-0.2 rounded border border-[#f26374]/30">
                 غير مرصود
               </span>
             </div>
           </div>
 
           {/* Card 4: غير مكتمل */}
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-2xs hover-card-motion relative overflow-hidden flex flex-col justify-between">
+          <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/90 shadow-2xs relative overflow-hidden flex flex-col justify-between">
             <div className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-amber-400 to-amber-500" />
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-amber-800">غير مكتمل</span>
-              {/* Prominent Embossed Icon Badge */}
-              <div className="w-9 h-9 rounded-2xl bg-gradient-to-b from-amber-400 to-amber-500 text-white flex items-center justify-center shadow-md shadow-amber-600/20 border-b-2 border-amber-600">
-                <Clock3 className="w-4 h-4" />
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-bold text-amber-800">غير مكتمل</span>
+              <div className="w-6 h-6 rounded-xl bg-gradient-to-b from-amber-400 to-amber-500 text-white flex items-center justify-center shadow-xs">
+                <Clock3 className="w-3 h-3" />
               </div>
             </div>
             <div>
-              <div className="text-2xl sm:text-3xl font-black text-amber-600 mb-1">
+              <div className="text-lg sm:text-xl font-black text-amber-600 mb-0.5">
                 {stats.incompleteCount}
               </div>
-              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                بحاجة لاستكمال
+              <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
+                استكمال
               </span>
             </div>
           </div>
         </div>
 
         {/* ====================================================================== */}
-        {/* 3 & 4. Analytics Grid (Side-by-side in landscape, stacked in portrait) */}
+        {/* 3 & 4. Analytics Grid (Donut & Field Stats side-by-side)               */}
         {/* ====================================================================== */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-          {/* 3. Donut Chart Card: "توزيع الحالات" (تصميم متوازن وممتلئ بدون مساحات فارغة) */}
-          <div className="lg:col-span-5 bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-2xs hover-card-motion flex flex-col justify-between">
-            {/* Header */}
-            <div>
-              <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-b from-emerald-500 to-emerald-600 text-white flex items-center justify-center shadow-xs border-b border-emerald-700">
-                    <PieChart className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-800 text-sm sm:text-base leading-tight">
-                      توزيع حالات المتابعة
-                    </h3>
-                    <p className="text-[11px] text-slate-400">
-                      تحليل الحالة العامة لمؤشرات الرصد
-                    </p>
-                  </div>
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-stretch">
+          {/* Donut Chart: Cases Distribution */}
+          <div className="md:col-span-5 bg-white rounded-2xl p-3 border border-slate-200/90 shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-2 border-b border-slate-100 pb-1.5">
+              <div className="flex items-center gap-1.5">
+                <div className="w-6 h-6 rounded-lg bg-emerald-50 text-[#165a49] flex items-center justify-center">
+                  <PieChart className="w-3.5 h-3.5" />
                 </div>
-                <div className="flex flex-col items-end gap-1">
-                  <span className="text-[11px] font-mono font-bold text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-lg border border-slate-200">
-                    الإجمالي: {stats.totalItems}
+                <h3 className="font-bold text-slate-800 text-xs">
+                  توزيع حالات المتابعة
+                </h3>
+              </div>
+              <span className="text-[10px] font-mono font-bold text-slate-600 bg-slate-100 px-2 py-0.2 rounded">
+                المجموع: {stats.totalItems}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 pt-1 pb-1">
+              {/* Circular SVG Donut */}
+              <div className="relative w-24 h-24 shrink-0 mx-auto">
+                <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90 transform">
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="34"
+                    fill="none"
+                    stroke="#f1f5f9"
+                    strokeWidth="11"
+                  />
+                  {strokeNotDone > 0 && (
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="34"
+                      fill="none"
+                      stroke="#f26374"
+                      strokeWidth="11"
+                      strokeDasharray={`${strokeNotDone} ${circumference}`}
+                      strokeDashoffset="0"
+                    />
+                  )}
+                  {strokeIncomplete > 0 && (
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="34"
+                      fill="none"
+                      stroke="#f59e0b"
+                      strokeWidth="11"
+                      strokeDasharray={`${strokeIncomplete} ${circumference}`}
+                      strokeDashoffset={-strokeNotDone}
+                    />
+                  )}
+                  {strokeDone > 0 && (
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="34"
+                      fill="none"
+                      stroke="#22b573"
+                      strokeWidth="11"
+                      strokeDasharray={`${strokeDone} ${circumference}`}
+                      strokeDashoffset={-(strokeNotDone + strokeIncomplete)}
+                    />
+                  )}
+                </svg>
+
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+                  <span className="text-base font-black text-slate-800 leading-none">
+                    {stats.completionRate}%
                   </span>
-                  <span className={`text-[10px] font-bold px-2 py-0.2 rounded-md border ${rating.color}`}>
-                    {rating.label}
+                  <span className="text-[8px] text-slate-400 font-bold mt-0.5">
+                    إنجاز
                   </span>
                 </div>
               </div>
 
-              {/* Main Donut + Status Breakdown Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center pt-1 pb-3">
-                {/* Circular SVG Donut (5 cols on sm+) */}
-                <div className="sm:col-span-5 flex flex-col items-center justify-center">
-                  <div className="relative w-36 h-36 sm:w-40 sm:h-40 shrink-0">
-                    <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90 transform filter drop-shadow-xs">
-                      <circle
-                        cx="50"
-                        cy="50"
-                        r="40"
-                        fill="none"
-                        stroke="#f1f5f9"
-                        strokeWidth="13"
-                      />
-
-                      {strokeNotDone > 0 && (
-                        <circle
-                          cx="50"
-                          cy="50"
-                          r="40"
-                          fill="none"
-                          stroke="#f26374"
-                          strokeWidth="13"
-                          strokeDasharray={`${strokeNotDone} ${circumference}`}
-                          strokeDashoffset="0"
-                          className="transition-all duration-500"
-                        />
-                      )}
-
-                      {strokeIncomplete > 0 && (
-                        <circle
-                          cx="50"
-                          cy="50"
-                          r="40"
-                          fill="none"
-                          stroke="#f59e0b"
-                          strokeWidth="13"
-                          strokeDasharray={`${strokeIncomplete} ${circumference}`}
-                          strokeDashoffset={-strokeNotDone}
-                          className="transition-all duration-500"
-                        />
-                      )}
-
-                      {strokeDone > 0 && (
-                        <circle
-                          cx="50"
-                          cy="50"
-                          r="40"
-                          fill="none"
-                          stroke="#22b573"
-                          strokeWidth="13"
-                          strokeDasharray={`${strokeDone} ${circumference}`}
-                          strokeDashoffset={-(strokeNotDone + strokeIncomplete)}
-                          className="transition-all duration-500"
-                        />
-                      )}
-                    </svg>
-
-                    {/* Inner Center Label */}
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
-                      <span className="text-2xl sm:text-3xl font-black text-slate-800 leading-none">
-                        {stats.completionRate}%
-                      </span>
-                      <span className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-wider">
-                        نسبة الإنجاز
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="text-center mt-1">
-                    <span className="text-[11px] font-bold text-slate-500">
-                      {stats.doneCount} منجز من أصل {stats.totalItems}
-                    </span>
-                  </div>
+              {/* Status List */}
+              <div className="flex-1 space-y-1 text-[10px]">
+                <div className="flex items-center justify-between bg-emerald-50/60 p-1 rounded-lg">
+                  <span className="font-bold text-emerald-800">تم:</span>
+                  <span className="font-mono font-bold text-emerald-700">{stats.doneCount} ({pctDone}%)</span>
                 </div>
-
-                {/* 3 Status Cards with Mini-Bars (7 cols on sm+) */}
-                <div className="sm:col-span-7 space-y-2 text-xs">
-                  {/* تم (منجز) */}
-                  <div className="p-2.5 rounded-2xl bg-[#22b573]/10 border border-[#22b573]/30">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-4 h-4 rounded-full bg-[#22b573] shadow-xs flex items-center justify-center text-white shrink-0">
-                          <CheckCircle2 className="w-3 h-3" />
-                        </div>
-                        <span className="font-bold text-slate-800 text-xs">تم (منجز بالكامل)</span>
-                      </div>
-                      <div className="text-left font-mono">
-                        <strong className="text-[#1ca164] text-xs font-black">{stats.doneCount}</strong>
-                        <span className="text-[#167d4e] text-[10px] mr-1 font-bold">({pctDone}%)</span>
-                      </div>
-                    </div>
-                    <div className="w-full bg-white/80 h-1.5 rounded-full overflow-hidden">
-                      <div 
-                        className="bg-[#22b573] h-full rounded-full transition-all duration-500" 
-                        style={{ width: `${pctDone}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* غير مكتمل */}
-                  <div className="p-2.5 rounded-2xl bg-amber-50/90 border border-amber-200">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-4 h-4 rounded-full bg-amber-500 shadow-xs flex items-center justify-center text-white shrink-0">
-                          <Clock3 className="w-3 h-3" />
-                        </div>
-                        <span className="font-bold text-amber-950 text-xs">غير مكتمل</span>
-                      </div>
-                      <div className="text-left font-mono">
-                        <strong className="text-amber-700 text-xs font-black">{stats.incompleteCount}</strong>
-                        <span className="text-amber-600 text-[10px] mr-1 font-bold">({pctIncomplete}%)</span>
-                      </div>
-                    </div>
-                    <div className="w-full bg-amber-200/70 h-1.5 rounded-full overflow-hidden">
-                      <div 
-                        className="bg-amber-500 h-full rounded-full transition-all duration-500" 
-                        style={{ width: `${pctIncomplete}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* لم يتم */}
-                  <div className="p-2.5 rounded-2xl bg-[#f26374]/10 border border-[#f26374]/30">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-4 h-4 rounded-full bg-[#f26374] shadow-xs flex items-center justify-center text-white shrink-0">
-                          <XCircle className="w-3 h-3" />
-                        </div>
-                        <span className="font-bold text-slate-800 text-xs">لم يتم (غير مرصود)</span>
-                      </div>
-                      <div className="text-left font-mono">
-                        <strong className="text-[#df4b5e] text-xs font-black">{stats.notDoneCount}</strong>
-                        <span className="text-[#c03445] text-[10px] mr-1 font-bold">({pctNotDone}%)</span>
-                      </div>
-                    </div>
-                    <div className="w-full bg-white/80 h-1.5 rounded-full overflow-hidden">
-                      <div 
-                        className="bg-[#f26374] h-full rounded-full transition-all duration-500" 
-                        style={{ width: `${pctNotDone}%` }}
-                      />
-                    </div>
-                  </div>
+                <div className="flex items-center justify-between bg-amber-50/60 p-1 rounded-lg">
+                  <span className="font-bold text-amber-800">غير مكتمل:</span>
+                  <span className="font-mono font-bold text-amber-700">{stats.incompleteCount} ({pctIncomplete}%)</span>
+                </div>
+                <div className="flex items-center justify-between bg-rose-50/60 p-1 rounded-lg">
+                  <span className="font-bold text-rose-800">لم يتم:</span>
+                  <span className="font-mono font-bold text-rose-700">{stats.notDoneCount} ({pctNotDone}%)</span>
                 </div>
               </div>
             </div>
 
-            {/* Bottom Section: Cumulative Bar, 3 KPI Mini-Cards & Diagnostic Note */}
-            <div className="mt-2 pt-3 border-t border-slate-100 space-y-3">
-              {/* Stacked Cumulative Progress Bar */}
-              <div>
-                <div className="flex items-center justify-between text-[11px] font-bold text-slate-600 mb-1.5">
-                  <span className="flex items-center gap-1.5">
-                    <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
-                    شريط التوزيع التراكمي للحالات
-                  </span>
-                  <span className="font-mono text-slate-400 text-[10px]">100%</span>
-                </div>
-                <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden flex border border-slate-200 shadow-inner">
-                  {pctDone > 0 && (
-                    <div
-                      style={{ width: `${pctDone}%` }}
-                      className="bg-gradient-to-r from-emerald-500 to-emerald-600 h-full transition-all duration-500"
-                      title={`تم: ${pctDone}%`}
-                    />
-                  )}
-                  {pctIncomplete > 0 && (
-                    <div
-                      style={{ width: `${pctIncomplete}%` }}
-                      className="bg-gradient-to-r from-amber-400 to-amber-500 h-full transition-all duration-500"
-                      title={`غير مكتمل: ${pctIncomplete}%`}
-                    />
-                  )}
-                  {pctNotDone > 0 && (
-                    <div
-                      style={{ width: `${pctNotDone}%` }}
-                      className="bg-gradient-to-r from-rose-500 to-red-500 h-full transition-all duration-500"
-                      title={`لم يتم: ${pctNotDone}%`}
-                    />
-                  )}
-                </div>
-              </div>
-
-              {/* 3 Metric Mini Cards */}
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-2 shadow-2xs">
-                  <span className="text-[10px] text-emerald-800 font-bold block">المنجز</span>
-                  <span className="text-xs sm:text-sm font-black font-mono text-[#167d4e]">{stats.doneCount}</span>
-                  <span className="text-[9px] text-emerald-600 block font-semibold">{pctDone}%</span>
-                </div>
-                <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-2 shadow-2xs">
-                  <span className="text-[10px] text-amber-900 font-bold block">غير مكتمل</span>
-                  <span className="text-xs sm:text-sm font-black font-mono text-amber-700">{stats.incompleteCount}</span>
-                  <span className="text-[9px] text-amber-600 block font-semibold">{pctIncomplete}%</span>
-                </div>
-                <div className="bg-rose-50/70 border border-rose-200/80 rounded-xl p-2 shadow-2xs">
-                  <span className="text-[10px] text-rose-900 font-bold block">لم يتم</span>
-                  <span className="text-xs sm:text-sm font-black font-mono text-rose-600">{stats.notDoneCount}</span>
-                  <span className="text-[9px] text-rose-500 block font-semibold">{pctNotDone}%</span>
-                </div>
-              </div>
-
-              {/* Diagnostic Insight Note */}
-              <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-2.5 flex items-start gap-2">
-                <div className="w-5 h-5 rounded-lg bg-emerald-100 text-[#165a49] flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
-                  <Sparkles className="w-3 h-3" />
-                </div>
-                <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
-                  {stats.totalItems === 0
-                    ? 'لا توجد بيانات متابعة مسجلة لهذه الفترة حتى الآن.'
-                    : (stats.incompleteCount + stats.notDoneCount === 0)
-                      ? 'مؤشر الإنجاز مكتمل بنسبة 100%، تم إنجاز جميع متطلبات الرصد بنجاح.'
-                      : `تم إنجاز ${stats.doneCount} من ${stats.totalItems} عنصر متابعة، ويتبقى ${stats.incompleteCount + stats.notDoneCount} عنصر بحاجة للاستكمال أو الرصد.`}
-                </p>
+            {/* Stacked Cumulative Progress Bar */}
+            <div className="mt-1 pt-1.5 border-t border-slate-100">
+              <div className="h-2 bg-slate-100 rounded-full overflow-hidden flex border border-slate-200">
+                {pctDone > 0 && (
+                  <div style={{ width: `${pctDone}%` }} className="bg-emerald-500 h-full" />
+                )}
+                {pctIncomplete > 0 && (
+                  <div style={{ width: `${pctIncomplete}%` }} className="bg-amber-400 h-full" />
+                )}
+                {pctNotDone > 0 && (
+                  <div style={{ width: `${pctNotDone}%` }} className="bg-rose-500 h-full" />
+                )}
               </div>
             </div>
           </div>
 
-          {/* 4. Field Statistics Card: "إحصائيات حسب المجال" */}
-          <div className="lg:col-span-7 bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-2xs hover-card-motion flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-5 border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-b from-teal-500 to-[#165a49] text-white flex items-center justify-center shadow-xs border-b border-emerald-800">
-                    <BarChart3 className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-800 text-sm sm:text-base">
-                      إحصائيات المتابعة حسب المجال
-                    </h3>
-                    <p className="text-[11px] text-slate-400">
-                      تفصيل نسب الإنجاز في (التحضير - الخطة الأسبوعية - الواجبات - الاختبارات)
-                    </p>
-                  </div>
+          {/* Field Statistics Card: "إحصائيات حسب المجال" */}
+          <div className="md:col-span-7 bg-white rounded-2xl p-3 border border-slate-200/90 shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-2 border-b border-slate-100 pb-1.5">
+              <div className="flex items-center gap-1.5">
+                <div className="w-6 h-6 rounded-lg bg-teal-50 text-[#165a49] flex items-center justify-center">
+                  <BarChart3 className="w-3.5 h-3.5" />
                 </div>
+                <h3 className="font-bold text-slate-800 text-xs">
+                  إحصائيات المتابعة حسب المجال
+                </h3>
               </div>
+            </div>
 
-              <div className="space-y-4">
-                {FOLLOW_UP_ITEMS.map((item) => {
-                  const data = stats.itemStats[item.key];
-                  const itemTotal = data.total || 1;
-                  const donePct = Math.round((data.done / itemTotal) * 100);
-                  const notDonePct = Math.round((data.notDone / itemTotal) * 100);
-                  const incompletePct = Math.round((data.incomplete / itemTotal) * 100);
+            <div className="space-y-1.5">
+              {FOLLOW_UP_ITEMS.map((item) => {
+                const data = stats.itemStats[item.key];
+                const itemTotal = data.total || 1;
+                const donePct = Math.round((data.done / itemTotal) * 100);
+                const notDonePct = Math.round((data.notDone / itemTotal) * 100);
+                const incompletePct = Math.round((data.incomplete / itemTotal) * 100);
 
-                  return (
-                    <div key={item.key} className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-3.5 space-y-2">
-                      <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-lg bg-white border border-slate-200 flex items-center justify-center shadow-2xs">
-                            {getItemIcon(item.key)}
-                          </div>
-                          <span>{item.label}</span>
-                        </div>
-                        <span className="text-[#165a49] font-mono bg-emerald-100/80 px-2 py-0.5 rounded-md border border-emerald-200 text-xs font-black">
-                          {donePct}% منجز
+                return (
+                  <div key={item.key} className="bg-slate-50/70 border border-slate-200/80 rounded-xl p-1.5 space-y-1">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-800">
+                      <div className="flex items-center gap-1.5">
+                        {getItemIcon(item.key)}
+                        <span>{item.label}</span>
+                      </div>
+                      <div className="flex items-center gap-2 font-mono text-[10px]">
+                        <span className="text-emerald-700">تم: {data.done}</span>
+                        <span className="text-amber-700">نقص: {data.incomplete}</span>
+                        <span className="text-red-600">لم يتم: {data.notDone}</span>
+                        <span className="text-[#165a49] font-black bg-emerald-100/80 px-1.5 py-0.2 rounded font-sans text-[10px]">
+                          {donePct}%
                         </span>
                       </div>
-
-                      {/* Multi-segmented Progress Bar */}
-                      <div className="h-4 bg-white rounded-full overflow-hidden flex border border-slate-200 shadow-inner">
-                        {donePct > 0 && (
-                          <div
-                            style={{ width: `${donePct}%` }}
-                            className="bg-gradient-to-r from-emerald-500 to-emerald-600 h-full"
-                            title={`تم: ${data.done}`}
-                          />
-                        )}
-                        {incompletePct > 0 && (
-                          <div
-                            style={{ width: `${incompletePct}%` }}
-                            className="bg-gradient-to-r from-amber-400 to-amber-500 h-full"
-                            title={`غير مكتمل: ${data.incomplete}`}
-                          />
-                        )}
-                        {notDonePct > 0 && (
-                          <div
-                            style={{ width: `${notDonePct}%` }}
-                            className="bg-gradient-to-r from-rose-500 to-red-500 h-full"
-                            title={`لم يتم: ${data.notDone}`}
-                          />
-                        )}
-                      </div>
-
-                      {/* Exact Numbers row */}
-                      <div className="flex items-center justify-between text-[11px] font-mono px-1 pt-0.5">
-                        <span className="text-emerald-700 font-bold">تم: {data.done}</span>
-                        <span className="text-amber-700 font-bold">غير مكتمل: {data.incomplete}</span>
-                        <span className="text-red-600 font-bold">لم يتم: {data.notDone}</span>
-                        <span className="text-slate-400">الإجمالي: {data.total}</span>
-                      </div>
                     </div>
-                  );
-                })}
-              </div>
+
+                    <div className="h-2 bg-white rounded-full overflow-hidden flex border border-slate-200">
+                      {donePct > 0 && (
+                        <div style={{ width: `${donePct}%` }} className="bg-emerald-500 h-full" />
+                      )}
+                      {incompletePct > 0 && (
+                        <div style={{ width: `${incompletePct}%` }} className="bg-amber-400 h-full" />
+                      )}
+                      {notDonePct > 0 && (
+                        <div style={{ width: `${notDonePct}%` }} className="bg-rose-500 h-full" />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
 
         {/* ====================================================================== */}
-        {/* 5. Teachers Breakdown Table: "تفصيل أداء المعلمين" (مشمولة بالـ PDF والطباعة) */}
+        {/* 5. Teachers Breakdown Table: "تفصيل أداء المعلمين"                       */}
         {/* ====================================================================== */}
-        <div className="bg-white rounded-3xl p-5 border border-slate-200/90 shadow-2xs hover-card-motion">
-          <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-b from-amber-500 to-amber-600 text-white flex items-center justify-center shadow-xs border-b border-amber-700">
-                <Award className="w-4 h-4" />
+        <div className="bg-white rounded-2xl p-3 border border-slate-200/90 shadow-2xs">
+          <div className="flex items-center justify-between mb-2 border-b border-slate-100 pb-1.5">
+            <div className="flex items-center gap-1.5">
+              <div className="w-6 h-6 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center">
+                <Award className="w-3.5 h-3.5" />
               </div>
-              <h3 className="font-bold text-slate-800 text-sm sm:text-base">
+              <h3 className="font-bold text-slate-800 text-xs">
                 {labels.teachersPerformanceTitle} ({stats.teacherBreakdown.length})
               </h3>
             </div>
-            <span className="text-xs text-slate-400 font-medium">
+            <span className="text-[10px] text-slate-400 font-medium">
               جدول التقييم الفردي
             </span>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-right text-xs">
+            <table className="w-full text-right text-[11px]">
               <thead>
-                <tr className="border-b border-slate-200 text-slate-600 font-bold bg-slate-50">
-                  <th className="py-3 px-3 rounded-r-xl">{labels.teachersHeaderColumn}</th>
-                  <th className="py-3 px-2">التخصص</th>
-                  <th className="py-3 px-2 text-center text-emerald-700">تم</th>
-                  <th className="py-3 px-2 text-center text-red-600">لم يتم</th>
-                  <th className="py-3 px-2 text-center text-amber-600">غير مكتمل</th>
-                  <th className="py-3 px-3 text-center rounded-l-xl">نسبة الإنجاز</th>
+                <tr className="border-b border-slate-200 text-slate-600 font-bold bg-slate-50 text-[10px]">
+                  <th className="py-1.5 px-2.5 rounded-r-lg">{labels.teachersHeaderColumn}</th>
+                  <th className="py-1.5 px-2">التخصص</th>
+                  <th className="py-1.5 px-2 text-center text-emerald-700">تم</th>
+                  <th className="py-1.5 px-2 text-center text-red-600">لم يتم</th>
+                  <th className="py-1.5 px-2 text-center text-amber-600">غير مكتمل</th>
+                  <th className="py-1.5 px-2.5 text-center rounded-l-lg">نسبة الإنجاز</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {stats.teacherBreakdown.map((row, idx) => (
                   <tr key={row.teacher.id} className="hover:bg-slate-50/80 transition">
-                    <td className="py-3 px-3">
-                      <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold flex items-center justify-center shrink-0">
+                    <td className="py-1.5 px-2.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-4 h-4 rounded-full bg-slate-100 text-slate-500 text-[9px] font-bold flex items-center justify-center shrink-0">
                           {idx + 1}
                         </span>
                         <span className="font-bold text-slate-900">{row.teacher.name}</span>
                       </div>
                     </td>
-                    <td className="py-3 px-2 text-slate-500 font-medium">
+                    <td className="py-1.5 px-2 text-slate-500 font-medium text-[10px]">
                       {row.teacher.subject || 'عام'}
                     </td>
-                    <td className="py-3 px-2 text-center font-bold text-emerald-700 font-mono">
+                    <td className="py-1.5 px-2 text-center font-bold text-emerald-700 font-mono text-[11px]">
                       {row.done}
                     </td>
-                    <td className="py-3 px-2 text-center font-bold text-red-600 font-mono">
+                    <td className="py-1.5 px-2 text-center font-bold text-red-600 font-mono text-[11px]">
                       {row.notDone}
                     </td>
-                    <td className="py-3 px-2 text-center font-bold text-amber-600 font-mono">
+                    <td className="py-1.5 px-2 text-center font-bold text-amber-600 font-mono text-[11px]">
                       {row.incomplete}
                     </td>
-                    <td className="py-3 px-3 text-center">
+                    <td className="py-1.5 px-2.5 text-center">
                       <span
-                        className={`inline-block px-2.5 py-0.5 rounded-full font-black font-mono text-[11px] border ${
+                        className={`inline-block px-2 py-0.2 rounded-full font-black font-mono text-[10px] border ${
                           row.rate >= 80
                             ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
                             : row.rate >= 50
@@ -1052,53 +910,34 @@ export const ReportsTab: React.FC = () => {
         {/* 6. Collected Daily Notes Section (الملاحظات المدونة خلال الفترة)         */}
         {/* ====================================================================== */}
         {stats.collectedNotes.length > 0 && (
-          <div className="bg-white rounded-3xl p-5 border border-slate-200/90 shadow-2xs">
-            <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-b from-sky-500 to-sky-600 text-white flex items-center justify-center shadow-xs border-b border-sky-700">
-                  <MessageSquare className="w-4 h-4" />
+          <div className="bg-white rounded-2xl p-3 border border-slate-200/90 shadow-2xs">
+            <div className="flex items-center justify-between mb-2 border-b border-slate-100 pb-1.5">
+              <div className="flex items-center gap-1.5">
+                <div className="w-6 h-6 rounded-lg bg-sky-50 text-sky-700 flex items-center justify-center">
+                  <MessageSquare className="w-3.5 h-3.5" />
                 </div>
-                <h3 className="font-bold text-slate-800 text-sm sm:text-base">
+                <h3 className="font-bold text-slate-800 text-xs">
                   الملاحظات اليومية المرصودة ({stats.collectedNotes.length})
                 </h3>
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {stats.collectedNotes.map((n, idx) => (
-                <div key={idx} className="p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs">
-                  <div className="flex items-center justify-between text-slate-500 font-bold mb-1">
+                <div key={idx} className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-[11px]">
+                  <div className="flex items-center justify-between text-slate-500 font-bold mb-0.5">
                     <span className="text-[#165a49] font-black">{n.teacherName}</span>
-                    <span className="text-[10px] bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                    <span className="text-[9px] bg-white px-1.5 py-0.2 rounded border border-slate-200">
                       {n.weekTitle} • يوم {n.dayName}
                     </span>
                   </div>
-                  <p className="text-slate-800 font-medium leading-relaxed">{n.note}</p>
+                  <p className="text-slate-800 font-medium leading-snug">{n.note}</p>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* ====================================================================== */}
-        {/* 7. Official Signatures Footer for Official PDF & Print                  */}
-        {/* ====================================================================== */}
-        <div className="pt-6 border-t-2 border-slate-300 mt-6 bg-slate-50/50 p-4 rounded-2xl">
-          <div className="grid grid-cols-2 text-center text-xs text-slate-800">
-            <div>
-              <p className="font-extrabold text-slate-900">{labels.supervisorSignatureLabel}</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">مكتب التعليم / الإشراف التربوي</p>
-              <div className="mt-8 border-b border-dashed border-slate-400 w-36 mx-auto" />
-              <p className="text-[10px] text-slate-400 mt-1">التوقيع والاعتماد</p>
-            </div>
-            <div>
-              <p className="font-extrabold text-slate-900">{labels.principalSignatureLabel}</p>
-              <p className="mt-0.5 font-bold text-[#165a49]">{currentSchool.principalName}</p>
-              <div className="mt-8 border-b border-dashed border-slate-400 w-36 mx-auto" />
-              <p className="text-[10px] text-slate-400 mt-1">الختم والتوقيع الرسمي</p>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );
