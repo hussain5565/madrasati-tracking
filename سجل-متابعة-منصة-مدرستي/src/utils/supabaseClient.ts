@@ -389,34 +389,7 @@ export async function pullAllFromSupabase(): Promise<{
   }
 
   try {
-    // 1. Try store table first
-    const { data: storeRows, error: storeErr } = await client
-      .from('madrasati_store')
-      .select('key, value');
-
-    if (!storeErr && storeRows && storeRows.length > 0) {
-      const result: {
-        schools?: School[];
-        teachers?: Teacher[];
-        records?: Record<string, StatusValue>;
-        notes?: Record<string, string>;
-      } = {};
-
-      storeRows.forEach((row) => {
-        if (row.key === 'schools') result.schools = row.value as School[];
-        if (row.key === 'teachers') result.teachers = row.value as Teacher[];
-        if (row.key === 'records') result.records = row.value as Record<string, StatusValue>;
-        if (row.key === 'notes') result.notes = row.value as Record<string, string>;
-      });
-
-      return {
-        success: true,
-        data: result,
-        message: 'تم استرجاع البيانات من قاعدة بيانات Supabase (عبر المتجر السحابي)',
-      };
-    }
-
-    // 2. Try relational tables
+    // 1. Primary: Try relational tables first (true source of truth)
     const { data: sRows, error: sErr } = await client.from('madrasati_schools').select('*');
     if (!sErr && sRows && sRows.length > 0) {
       const schools: School[] = sRows.map((s) => ({
@@ -455,21 +428,175 @@ export async function pullAllFromSupabase(): Promise<{
         if (n.note_key) notes[n.note_key] = n.note;
       });
 
+      // Also ensure madrasati_store stays in sync in the background
+      Promise.resolve(
+        client.from('madrasati_store').upsert([
+          { key: 'schools', value: schools, updated_at: new Date().toISOString() },
+          { key: 'teachers', value: teachers, updated_at: new Date().toISOString() },
+          { key: 'records', value: records, updated_at: new Date().toISOString() },
+          { key: 'notes', value: notes, updated_at: new Date().toISOString() },
+        ])
+      ).catch(() => {});
+
       return {
         success: true,
         data: { schools, teachers, records, notes },
-        message: 'تم استرجاع البيانات من جداول Supabase العلائقية بنجاح',
+        message: 'تم استرجاع البيانات من جداول Supabase السحابية بنجاح',
+      };
+    }
+
+    // 2. Fallback: Try store table if relational tables were empty
+    const { data: storeRows, error: storeErr } = await client
+      .from('madrasati_store')
+      .select('key, value');
+
+    if (!storeErr && storeRows && storeRows.length > 0) {
+      const result: {
+        schools?: School[];
+        teachers?: Teacher[];
+        records?: Record<string, StatusValue>;
+        notes?: Record<string, string>;
+      } = {};
+
+      storeRows.forEach((row) => {
+        if (row.key === 'schools') result.schools = row.value as School[];
+        if (row.key === 'teachers') result.teachers = row.value as Teacher[];
+        if (row.key === 'records') result.records = row.value as Record<string, StatusValue>;
+        if (row.key === 'notes') result.notes = row.value as Record<string, string>;
+      });
+
+      return {
+        success: true,
+        data: result,
+        message: 'تم استرجاع البيانات من قاعدة بيانات Supabase (عبر المتجر السحابي)',
       };
     }
 
     return {
       success: false,
-      message: 'لم يتم العثور على بيانات محفوظة مسبقاً في الجداول السحابية.',
+      message: 'لم يتم العثور على بيانات سحابية سابقة.',
     };
   } catch (err: unknown) {
     return {
       success: false,
       message: `خطأ أثناء جلب البيانات: ${err instanceof Error ? err.message : String(err)}`,
     };
+  }
+}
+
+/**
+ * Direct real-time sync helpers for immediate database write-through
+ */
+export async function syncTeacherToSupabase(teacher: Teacher): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) return;
+  try {
+    await client.from('madrasati_teachers').upsert({
+      id: teacher.id,
+      school_id: teacher.schoolId,
+      name: teacher.name,
+      subject: teacher.subject || 'عام',
+      civil_id: teacher.civilId || '',
+      phone: teacher.phone || '',
+      created_at: teacher.createdAt || new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Failed to sync teacher to Supabase:', err);
+  }
+}
+
+export async function deleteTeacherFromSupabase(teacherId: string): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) return;
+  try {
+    await client.from('madrasati_teachers').delete().eq('id', teacherId);
+  } catch (err) {
+    console.error('Failed to delete teacher from Supabase:', err);
+  }
+}
+
+export async function syncSchoolToSupabase(school: School): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) return;
+  try {
+    await client.from('madrasati_schools').upsert({
+      id: school.id,
+      name: school.name,
+      code: school.code,
+      password: school.password,
+      principal_name: school.principalName,
+      education_office: school.educationOffice || '',
+      stage: school.stage || '',
+      gender_category: school.genderCategory || 'boys',
+      city: school.city || '',
+      created_at: school.createdAt || new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Failed to sync school to Supabase:', err);
+  }
+}
+
+export async function deleteSchoolFromSupabase(schoolId: string): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) return;
+  try {
+    await client.from('madrasati_schools').delete().eq('id', schoolId);
+    await client.from('madrasati_teachers').delete().eq('school_id', schoolId);
+    await client.from('madrasati_records').delete().eq('school_id', schoolId);
+    await client.from('madrasati_notes').delete().eq('school_id', schoolId);
+  } catch (err) {
+    console.error('Failed to delete school from Supabase:', err);
+  }
+}
+
+export async function syncRecordToSupabase(
+  schoolId: string,
+  teacherId: string,
+  week: number,
+  dayIndex: number,
+  itemKey: string,
+  status: string
+): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) return;
+  const key = `${schoolId}_${teacherId}_${week}_${dayIndex}_${itemKey}`;
+  try {
+    await client.from('madrasati_records').upsert({
+      record_key: key,
+      school_id: schoolId,
+      teacher_id: teacherId,
+      week_number: week,
+      day_index: dayIndex,
+      item_key: itemKey,
+      status: status,
+      updated_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Failed to sync record to Supabase:', err);
+  }
+}
+
+export async function syncNoteToSupabase(
+  schoolId: string,
+  teacherId: string,
+  week: number,
+  dayIndex: number,
+  note: string
+): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) return;
+  const key = `${schoolId}_${teacherId}_${week}_${dayIndex}`;
+  try {
+    await client.from('madrasati_notes').upsert({
+      note_key: key,
+      school_id: schoolId,
+      teacher_id: teacherId,
+      week_number: week,
+      day_index: dayIndex,
+      note: note,
+      updated_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Failed to sync note to Supabase:', err);
   }
 }
