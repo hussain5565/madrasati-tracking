@@ -6,6 +6,12 @@ import {
   testSupabaseConnection,
   pushAllToSupabase,
   pullAllFromSupabase,
+  syncTeacherToSupabase,
+  deleteTeacherFromSupabase,
+  syncSchoolToSupabase,
+  deleteSchoolFromSupabase,
+  syncRecordToSupabase,
+  syncNoteToSupabase,
   SupabaseConfig,
 } from '../utils/supabaseClient';
 
@@ -21,7 +27,7 @@ interface AuthUser {
 interface AppContextType {
   // Auth state
   currentUser: AuthUser | null;
-  login: (userOrCode: string, pass: string) => boolean;
+  login: (userOrCode: string, pass: string) => Promise<boolean>;
   loginAsAdmin: (user: string, pass: string) => boolean;
   loginAsSchool: (code: string, pass: string) => boolean;
   switchSchoolAsAdmin: (schoolId: string) => void;
@@ -232,10 +238,71 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [supabaseConfig.enabled]);
 
-  // Initial check on mount
+  // Pull data from Supabase (primary source of truth)
+  const pullFromSupabase = useCallback(async (): Promise<{
+    success: boolean;
+    data?: {
+      schools?: School[];
+      teachers?: Teacher[];
+      records?: Record<string, StatusValue>;
+      notes?: Record<string, string>;
+    };
+    message: string;
+  }> => {
+    setIsSyncing(true);
+    try {
+      const res = await pullAllFromSupabase();
+      if (res.success && res.data) {
+        if (res.data.schools && res.data.schools.length > 0) {
+          setSchools(res.data.schools);
+        }
+        if (res.data.teachers && res.data.teachers.length > 0) {
+          setTeachers(res.data.teachers);
+        }
+        if (res.data.records) {
+          setRecords(res.data.records);
+        }
+        if (res.data.notes) {
+          setNotes(res.data.notes);
+        }
+        const now = new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        setLastSyncTime(now);
+        localStorage.setItem('madrasati_last_sync', now);
+        setSupabaseStatus('connected');
+        setSupabaseMessage('تم جلب البيانات السحابية وتحديث السجل بنجاح');
+        return { success: true, message: 'تم استرجاع البيانات السحابية بنجاح', data: res.data };
+      } else {
+        setSupabaseMessage(res.message);
+        return { success: false, message: res.message };
+      }
+    } catch (err: unknown) {
+      const msg = `تعذر الاسترجاع: ${err instanceof Error ? err.message : String(err)}`;
+      setSupabaseMessage(msg);
+      return { success: false, message: msg };
+    } finally {
+      setIsSyncing(false);
+    }
+  }, []);
+
+  // Initial check AND auto-pull on mount to guarantee fresh cross-device data
   useEffect(() => {
-    checkSupabase();
-  }, [checkSupabase]);
+    const init = async () => {
+      await checkSupabase();
+      await pullFromSupabase();
+    };
+    init();
+
+    // Auto-refresh when tab gains focus or user switches back
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        pullFromSupabase();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [checkSupabase, pullFromSupabase]);
 
   // Update config
   const updateSupabaseConfig = (updates: Partial<SupabaseConfig>) => {
@@ -244,6 +311,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     saveSupabaseConfig(updated);
     setTimeout(() => {
       checkSupabase();
+      pullFromSupabase();
     }, 200);
   };
 
@@ -273,43 +341,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return res;
     } catch (err: unknown) {
       const msg = `تعذر الحفظ السحابي: ${err instanceof Error ? err.message : String(err)}`;
-      setSupabaseMessage(msg);
-      return { success: false, message: msg };
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  // Pull data from Supabase
-  const pullFromSupabase = async (): Promise<{ success: boolean; message: string }> => {
-    setIsSyncing(true);
-    try {
-      const res = await pullAllFromSupabase();
-      if (res.success && res.data) {
-        if (res.data.schools && res.data.schools.length > 0) {
-          setSchools(res.data.schools);
-        }
-        if (res.data.teachers && res.data.teachers.length > 0) {
-          setTeachers(res.data.teachers);
-        }
-        if (res.data.records) {
-          setRecords(res.data.records);
-        }
-        if (res.data.notes) {
-          setNotes(res.data.notes);
-        }
-        const now = new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        setLastSyncTime(now);
-        localStorage.setItem('madrasati_last_sync', now);
-        setSupabaseStatus('connected');
-        setSupabaseMessage('تم جلب البيانات السحابية وتحديث السجل بنجاح');
-        return { success: true, message: 'تم استرجاع البيانات السحابية بنجاح' };
-      } else {
-        setSupabaseMessage(res.message);
-        return { success: false, message: res.message };
-      }
-    } catch (err: unknown) {
-      const msg = `تعذر الاسترجاع: ${err instanceof Error ? err.message : String(err)}`;
       setSupabaseMessage(msg);
       return { success: false, message: msg };
     } finally {
@@ -394,15 +425,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [currentSchool?.id, currentSchoolTeachers, selectedTeacherId]);
 
   // Auth actions
-  const login = (userOrCode: string, pass: string): boolean => {
+  // Auth actions
+  const login = async (userOrCode: string, pass: string): Promise<boolean> => {
     const cleanUser = userOrCode.trim();
     // 1. Check Admin credentials
     if (loginAsAdmin(cleanUser, pass)) {
       return true;
     }
-    // 2. Check School credentials
+    // 2. Check School credentials in local memory
     if (loginAsSchool(cleanUser, pass)) {
       return true;
+    }
+    // 3. Fallback: Pull from Supabase in case the school was newly added on another device
+    const res = await pullFromSupabase();
+    if (res.success && res.data?.schools) {
+      const school = res.data.schools.find(
+        (s) => s.code.toLowerCase().trim() === cleanUser.toLowerCase() && s.password === pass
+      );
+      if (school) {
+        setCurrentUser({
+          role: 'school',
+          schoolId: school.id,
+          schoolName: school.name,
+          principalName: school.principalName,
+          username: school.code,
+        });
+        setActiveTab('followup');
+        return true;
+      }
     }
     return false;
   };
@@ -431,6 +481,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         username: school.code,
       });
       setActiveTab('followup');
+      // Trigger background pull to refresh this school's records/teachers
+      pullFromSupabase();
       return true;
     }
     return false;
@@ -464,6 +516,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // School actions
   const addSchool = (schoolData: Omit<School, 'id' | 'createdAt'>): School => {
+    // Check if code already exists to prevent duplicate entries
+    const existing = schools.find(
+      (s) => s.code.toLowerCase().trim() === schoolData.code.toLowerCase().trim()
+    );
+    if (existing) {
+      return existing;
+    }
+
     const newSchool: School = {
       ...schoolData,
       id: `school-${Date.now()}`,
@@ -481,13 +541,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setTeachers((prev) => [...prev, defaultTeacher]);
 
+    // Real-time immediate Supabase persistence
+    syncSchoolToSupabase(newSchool);
+    syncTeacherToSupabase(defaultTeacher);
+
     return newSchool;
   };
 
   const updateSchool = (id: string, updates: Partial<School>) => {
-    setSchools((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, ...updates } : s))
-    );
+    setSchools((prev) => {
+      const updated = prev.map((s) => (s.id === id ? { ...s, ...updates } : s));
+      const target = updated.find((s) => s.id === id);
+      if (target) {
+        syncSchoolToSupabase(target);
+      }
+      return updated;
+    });
     if (currentUser?.schoolId === id) {
       setCurrentUser((prev) =>
         prev
@@ -504,6 +573,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteSchool = (id: string) => {
     setSchools((prev) => prev.filter((s) => s.id !== id));
     setTeachers((prev) => prev.filter((t) => t.schoolId !== id));
+    deleteSchoolFromSupabase(id);
     setRecords((prev) => {
       const updated = { ...prev };
       Object.keys(updated).forEach((k) => {
@@ -530,7 +600,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Teacher actions
+  // Teacher actions with real-time Supabase sync
   const addTeacher = (name: string, subject?: string, civilId?: string, phone?: string) => {
     if (!currentSchool) return;
     const newTeacher: Teacher = {
@@ -544,6 +614,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setTeachers((prev) => [...prev, newTeacher]);
     setSelectedTeacherId(newTeacher.id);
+    syncTeacherToSupabase(newTeacher);
   };
 
   const addTeacherToSchool = (
@@ -563,6 +634,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString(),
     };
     setTeachers((prev) => [...prev, newTeacher]);
+    syncTeacherToSupabase(newTeacher);
     return newTeacher;
   };
 
@@ -586,17 +658,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (newTeachersList.length > 0) {
       setSelectedTeacherId(newTeachersList[0].id);
     }
+    newTeachersList.forEach((t) => syncTeacherToSupabase(t));
     return newTeachersList.length;
   };
 
   const updateTeacher = (id: string, updates: Partial<Teacher>) => {
-    setTeachers((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, ...updates } : t))
-    );
+    setTeachers((prev) => {
+      const updated = prev.map((t) => (t.id === id ? { ...t, ...updates } : t));
+      const target = updated.find((t) => t.id === id);
+      if (target) {
+        syncTeacherToSupabase(target);
+      }
+      return updated;
+    });
   };
 
   const deleteTeacher = (id: string) => {
     setTeachers((prev) => prev.filter((t) => t.id !== id));
+    deleteTeacherFromSupabase(id);
     setRecords((prev) => {
       const updated = { ...prev };
       Object.keys(updated).forEach((k) => {
@@ -617,7 +696,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  // Status tracking
+  // Status tracking with real-time Supabase sync
   const getRecordKey = (schoolId: string, teacherId: string, week: number, dayIndex: number, itemKey: FollowUpItemKey) => {
     return `${schoolId}_${teacherId}_${week}_${dayIndex}_${itemKey}`;
   };
@@ -646,6 +725,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...prev,
       [key]: status,
     }));
+    syncRecordToSupabase(schoolId, teacherId, week, dayIndex, itemKey, status);
   };
 
   const setDayAllStatus = (
@@ -661,6 +741,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       items.forEach((item) => {
         const key = getRecordKey(schoolId, teacherId, week, dayIndex, item);
         updated[key] = status;
+        syncRecordToSupabase(schoolId, teacherId, week, dayIndex, item, status);
       });
       return updated;
     });
@@ -679,6 +760,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         items.forEach((item) => {
           const key = getRecordKey(schoolId, teacherId, week, day, item);
           updated[key] = status;
+          syncRecordToSupabase(schoolId, teacherId, week, day, item, status);
         });
       }
       return updated;
@@ -701,6 +783,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...prev,
       [key]: note,
     }));
+    syncNoteToSupabase(schoolId, teacherId, week, dayIndex, note);
   };
 
   const clearSchoolRecords = (schoolId: string) => {
