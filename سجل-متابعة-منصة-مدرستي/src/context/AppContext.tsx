@@ -15,11 +15,13 @@ interface AuthUser {
   schoolName?: string;
   principalName?: string;
   username: string;
+  isAdminImpersonating?: boolean;
 }
 
 interface AppContextType {
   // Auth state
   currentUser: AuthUser | null;
+  login: (userOrCode: string, pass: string) => boolean;
   loginAsAdmin: (user: string, pass: string) => boolean;
   loginAsSchool: (code: string, pass: string) => boolean;
   switchSchoolAsAdmin: (schoolId: string) => void;
@@ -109,7 +111,7 @@ const GENERIC_DEFAULT_TEACHERS: Teacher[] = [
 ];
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const STORAGE_KEY_AUTH = 'madrasati_auth_v2';
+  const STORAGE_KEY_AUTH = 'madrasati_auth_session';
   const STORAGE_KEY_SCHOOLS = 'madrasati_schools_v2';
   const STORAGE_KEY_TEACHERS = 'madrasati_teachers_v2';
   const STORAGE_KEY_RECORDS = 'madrasati_records_v2';
@@ -155,20 +157,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return {};
   });
 
+  // User starts at null so the app opens into the Login Page
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_AUTH);
-      if (saved) return JSON.parse(saved);
+      // Clear legacy localStorage auth keys so stale mock school is not loaded
+      localStorage.removeItem('madrasati_auth_v2');
+      localStorage.removeItem('madrasati_auth');
+      
+      const sessionSaved = sessionStorage.getItem('madrasati_auth_session');
+      if (sessionSaved) return JSON.parse(sessionSaved);
     } catch {
       // ignore
     }
-    return {
-      role: 'school',
-      schoolId: 'school-1',
-      schoolName: 'المدرسة',
-      principalName: 'مدير المدرسة',
-      username: 'school101',
-    };
+    return null;
   });
 
   const [activeTab, setActiveTab] = useState<'followup' | 'settings' | 'reports'>('followup');
@@ -366,10 +367,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [notes]);
 
   useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem(STORAGE_KEY_AUTH, JSON.stringify(currentUser));
-    } else {
-      localStorage.removeItem(STORAGE_KEY_AUTH);
+    try {
+      if (currentUser) {
+        sessionStorage.setItem(STORAGE_KEY_AUTH, JSON.stringify(currentUser));
+      } else {
+        sessionStorage.removeItem(STORAGE_KEY_AUTH);
+      }
+    } catch {
+      // ignore
     }
   }, [currentUser]);
 
@@ -389,6 +394,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [currentSchool?.id, currentSchoolTeachers, selectedTeacherId]);
 
   // Auth actions
+  const login = (userOrCode: string, pass: string): boolean => {
+    const cleanUser = userOrCode.trim();
+    // 1. Check Admin credentials
+    if (loginAsAdmin(cleanUser, pass)) {
+      return true;
+    }
+    // 2. Check School credentials
+    if (loginAsSchool(cleanUser, pass)) {
+      return true;
+    }
+    return false;
+  };
+
   const loginAsAdmin = (user: string, pass: string): boolean => {
     if (user.trim() === 'admin100' && pass === '123456@') {
       setCurrentUser({
@@ -427,12 +445,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         schoolName: school.name,
         principalName: school.principalName,
         username: school.code,
+        isAdminImpersonating: true,
       });
       setActiveTab('followup');
     }
   };
 
   const logout = () => {
+    try {
+      sessionStorage.removeItem(STORAGE_KEY_AUTH);
+      localStorage.removeItem('madrasati_auth_v2');
+      localStorage.removeItem('madrasati_auth');
+    } catch {
+      // ignore
+    }
     setCurrentUser(null);
   };
 
@@ -738,6 +764,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider
       value={{
         currentUser,
+        login,
         loginAsAdmin,
         loginAsSchool,
         switchSchoolAsAdmin,
